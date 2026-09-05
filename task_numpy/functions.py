@@ -24,43 +24,37 @@ def max_after_zero(x:list):
 
 
 def convert_image(img, coefs):
-    """Sum up image channels with weights from coefs array
+    for i in range(len(img)):
+        for j in range(len(img[i])):
+            for k in range(len(img[i][j])):
+                img[i][j][k] *= coefs[k]
 
-    input:
-    img -- 3-d numpy array (H x W x 3)
-    coefs -- 1-d numpy array (length 3)
-    output:
-    img -- 2-d numpy array
+            img[i][j] = sum(img[i][j])
 
-    Not vectorized implementation.
-    """
+    return img
 
-    pass
+    
 
 
 def run_length_encoding(x):
-    """Make run-length encoding.
+    counter = 1
+    length_number = []
+    values = [x[0]]
+    for i in range(1, len(x)):
+        if x[i] != x[i-1]:
+            values.append(x[i])
+            length_number.append(counter)
+            counter = 0
 
-    input:
-    x -- 1-d numpy array
-    output:
-    elements, counters -- integer iterables
+        counter += 1
 
-    Not vectorized implementation.
-    """
+    length_number.append(counter)
 
-    pass
+    return values, length_number
+
+# x = np.array([1,1,1,2,2,3,3,3,3]).tolist()
+# print(run_length_encoding(x))
 
 
 def pairwise_distance(x, y):
-    """Return pairwise object distance.
-
-    input:
-    x, y -- 2d numpy arrays
-    output:
-    distance array -- 2d numpy array
-
-    Not vectorized implementation.
-    """
-
-    pass
+    return sum((x[i] - y[i])**2 for i in range(len(x))) ** 0.5
