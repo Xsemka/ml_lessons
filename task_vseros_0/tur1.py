@@ -7,6 +7,8 @@ import math
 from torch import nn
 from sklearn.linear_model import SGDRegressor, QuantileRegressor
 from sklearn.metrics import mean_absolute_error
+from tqdm.auto import tqdm
+from torch.optim import Adam
 torch.set_default_device("cuda")
 
 def task_a1():
@@ -29,10 +31,12 @@ def task_c1(total_sim, batch_size):
     for batch in range(total_sim):
         tnsr = torch.rand(batch_size, 10)
         tnsr, _ = torch.sort(tnsr)
-        valid_mask = (torch.max(torch.diff(tnsr, dim=1), dim=1).values <= 0.25) & (tnsr[:,0] <= 0.25) & (tnsr[:,-1] >= 0.75) 
+        valid_mask = (torch.max(torch.diff(tnsr, dim=1), dim=1).values <= 0.25) & (tnsr[:,0] <= 0.25) & (tnsr[:,-1] >= 0.75) & (torch.min(torch.diff(tnsr, dim=1), dim=1).values >= 0.01)
         tnsr = tnsr[valid_mask]
+        if tnsr.shape[0] == 0:
+            continue
 
-        local_max = torch.max(torch.abs(torch.mean(tnsr, dim=1) - torch.median(tnsr, dim=1).values), dim=0).values.item()
+        local_max = torch.max(torch.abs(torch.mean(tnsr, dim=1) - (tnsr[:, 4] + tnsr[:, 5])/2), dim=0).values.item()
         if local_max > max_sub:
             max_sub = local_max
 
@@ -41,6 +45,52 @@ def task_c1(total_sim, batch_size):
 
 
     return max_sub
+
+def task_c1_grad(epochs, k = 100, lr = 10**-3):
+    x = torch.rand(10, requires_grad=True)
+    optimizer = Adam([x], lr=lr)
+
+    max_diff = 0.0
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+        x_sorted, _ = torch.sort(x)
+
+        mean = torch.mean(x_sorted)
+        median = (x_sorted[4] + x_sorted[5]) / 2.0
+        diffs = torch.diff(x_sorted)
+
+        target_loss = -torch.abs(mean - median)
+
+        pentality = 0.0
+
+        pentality += k * torch.sum(torch.relu(-x_sorted))
+        pentality += k * torch.sum(torch.relu(x_sorted - 1.0))
+        pentality += k * torch.sum(torch.relu(0.01 - diffs))
+        pentality += k * torch.sum(torch.relu(diffs - 0.25))
+        pentality += k * torch.relu(x_sorted[0] - 0.25)
+        pentality += k * torch.relu(0.75 - x_sorted[9])
+
+        loss = target_loss + pentality
+
+        loss.backward()
+        optimizer.step()
+
+        if epoch % 500 == 0:
+            with torch.no_grad():
+                x_check, _ = torch.sort(x)
+                c_diff = torch.diff(x_check)
+
+                valid = (x_check[0] <= 0.25 and x_check[9] >= 0.75 and torch.all(x_check >= 0) and torch.all(x_check <= 1) and torch.all(c_diff >= 0.01) and torch.all(c_diff <= 0.25))
+                if valid:
+                    c_mean = torch.mean(x_check)
+                    c_median = (x_check[4] + x_check[5]) / 2.0
+                    c_diff = torch.abs(c_mean - c_median)
+
+                    if max_diff < c_diff:
+                        max_diff = c_diff
+            print(f"эпоха {epoch} завершилась с максимальной разностью {max_diff}")
+
+    return max_diff
 
 
 
@@ -60,8 +110,9 @@ def task_d1():
     score = mean_absolute_error(y, pred)
     return float(f"{score:.6f}")
 
-def task_e1(k = 4, ar = 0.1):
+def task_e1(n = 4, ar = 0.1):
     max_accuracy = torch.tensor([0.0, 0.0, 0.0])
+
     field1 = torch.tensor([
         [1,1,1,1,0,1,1,0,1,1,1,1],
         [1,0,0,1,0,1,1,0,1,0,0,0],
@@ -86,25 +137,41 @@ def task_e1(k = 4, ar = 0.1):
         [1,1,1,1,0,1,1,1,0],
     ])
 
-    x1 = (torch.rand(10**k) - 0.5) * field1.shape[0]
-    y1 = (torch.rand(10**k) - 0.5) * field1.shape[1]
+    fields = [field1, field2, field3]
 
-    x2 = (torch.rand(10**k) - 0.5) * field2.shape[0]
-    y2 = (torch.rand(10**k) - 0.5) * field2.shape[1]
+    thetas_deg = torch.arange(-90, 90, ar)
+    thetas_rad = thetas_deg * (torch.pi / 180)
+    k = torch.tan(thetas_rad)
 
-    x3 = (torch.rand(10**k) - 0.5) * field3.shape[0]
-    y3 = (torch.rand(10**k) - 0.5) * field3.shape[1]
+    for f_indx, field in enumerate(tqdm(fields, desc="Обработка полей")):
+        h, w = field.shape
+        x = (torch.rand(10**n) - 0.5) * w
+        y = (torch.rand(10**n) - 0.5) * h
+        cols = torch.floor(x + w/2).int()
+        rows = torch.floor(y + h/2).int()
 
+        targets = field[rows, cols].unsqueeze(1).float()
 
-    thetas = torch.arange(-90, 90, ar)
+        side = y.unsqueeze(1) - k.unsqueeze(0) * x.unsqueeze(1)
 
+        pred_up = (side > 0).float()
+        pred_down = (side <= 0).float()
 
+        acc_up = (pred_up == targets).float().mean(dim=0)
+        acc_down = (pred_down == targets).float().mean(dim=0)
 
+        vertical_side = x.unsqueeze(1)
+        pred1 = (vertical_side > 0).float()
+        pred2 = (vertical_side <= 0).float()
 
+        acc_v1 = (pred1 == targets).float().mean(dim=0)
+        acc_v2 = (pred2 == targets).float().mean(dim=0)
+        maxv = torch.max(acc_v1, acc_v2)
 
+        best_angle_acc = torch.max(torch.max(acc_up), torch.max(acc_down))
+        max_accuracy[f_indx] = torch.max(best_angle_acc, maxv)
 
-
-
+    return max_accuracy
 
 def task_f1(): #решаем по формуле N = (I - Q)^-1 где I это еденичная матрица, а Q матрица переходов с вероятностями 
     сhar = {"A":0, "D":1, "E":2, "I":3, "L":4, "M":5, "N":6, "S":7, "T":8}
@@ -154,6 +221,7 @@ def task_h1():
     pass
 
 
+print(task_c1_grad(10**6, 100, lr=10**-4))
 
 
-print(task_f1())
+
