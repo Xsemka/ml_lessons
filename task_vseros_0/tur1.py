@@ -8,16 +8,17 @@ from torch import nn
 from sklearn.linear_model import SGDRegressor, QuantileRegressor
 from sklearn.metrics import mean_absolute_error
 from tqdm.auto import tqdm
-from torch.optim import Adam
 torch.set_default_device("cuda")
 
 def task_a1():
+    ans = []
     for n in range(100, 0, -1):
         power = 2 ** n
         if 123456123456123456 % power == 0:
             x = (123456123456123456// power) - 1
             if x >= 1:
-                return x
+                ans.append(x)
+    return ans
             
 def task_b1():
     #т.к. для данных входных значений на выходе нет 0 и 255 значит функция clip не применятась. Т.к. на входе 2 значения, а на выходе 3 => матрица имеет формат 2х3, при а так как нет слоёв аквтивации, то вся функция линейна и веса матрицы можно найти системой уравнений и вычислить ответ вообще без программирования, а потом применить на ответ clip
@@ -48,7 +49,7 @@ def task_c1(total_sim, batch_size):
 
 def task_c1_grad(epochs, k = 100, lr = 10**-3):
     x = torch.rand(10, requires_grad=True)
-    optimizer = Adam([x], lr=lr)
+    optimizer = torch.optim.AdamW([x], lr=lr)
 
     max_diff = 0.0
     for epoch in range(epochs):
@@ -91,6 +92,37 @@ def task_c1_grad(epochs, k = 100, lr = 10**-3):
             print(f"эпоха {epoch} завершилась с максимальной разностью {max_diff}")
 
     return max_diff
+
+def task_c1_scipy():
+    def objective(x):
+        x_sorted = np.sort(x)
+
+        mean = np.mean(x_sorted)
+        median = (x_sorted[4] + x_sorted[5]) / 2.0
+        return -abs(mean - median)
+
+    x0 = np.sort(np.random.random(10))
+    cons = []
+    for i in range(9):
+        cons.append({
+            "type": "ineq",
+            "fun" : lambda x, idx = i : 0.25 - (x[idx+1] - x[idx])
+        })
+
+        cons.append({
+            "type": "ineq",
+            "fun" : lambda x, idx = i : x[idx + 1] - x[idx] - 0.01
+        })
+    
+    cons.append({
+        "type": "ineq",
+        "fun" : lambda x : 0.25 - (1.0 - x[9])
+    })
+
+    bounds = [(0.0, 1.0)] * 10
+    res = minimize(objective, x0 = x0, constraints=cons, bounds=bounds, method="SLSQP", options={"maxiter" : 10000})
+
+    return -res.fun
 
 
 
@@ -221,7 +253,5 @@ def task_h1():
     pass
 
 
-print(task_c1_grad(10**6, 100, lr=10**-4))
 
-
-
+print(task_c1_scipy())
