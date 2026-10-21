@@ -251,7 +251,3 @@ def task_g1():
 
 def task_h1():
     pass
-
-
-
-print(task_c1_scipy())

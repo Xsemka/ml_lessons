@@ -15,9 +15,10 @@ from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
+from torchmetrics import Accuracy
 from model_lib import getModel
 import matplotlib.pyplot as plt
-torch.set_default_device("cuda")
+
 
 
 def task_a2():
@@ -64,6 +65,8 @@ def task_a2():
     ans.update({"a5" : matching_islands_count})
 
     return ans
+
+
 
 def task_b2():
     data_raw = pd.read_csv("task_vseros_0/data_B.csv")
@@ -125,77 +128,153 @@ def task_b2():
     return study.best_value
 
 
+
 def task_c2():
-    models = getModel(100)
+    models = getModel(300)
     sampler = optuna.samplers.TPESampler(multivariate=True, warn_independent_sampling=False)
     pruner = optuna.pruners.HyperbandPruner(min_resource=1, max_resource=100, reduction_factor=3)
 
     scaler = StandardScaler()
     ore = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-    pca = PCA(n_components=4)
+    pca = PCA(n_components=3)
 
-    
+    apartment_type_sinonims = {"Вторичка" : "Вторичка",
+                               "Вторичный рынок" : "Вторичка",
+                               "Вторичное жилье" : "Вторичка",
+                               "Новостройка" : "Новостройка",
+                               "Первичка" : "Новостройка",
+                               "От застройщика" : "Новостройка",
+                               "Старый фонд" : "Вторичка",
+                               "New building" : "Новостройка",
+                               "Secondary housing" : "Вторичка",
+                               "Новая" : "Новостройка",
+                               "Б/У квартира" : "Вторичка",
+                               "Новое строительство" : "Новостройка",
+                               "Свежая постройка" : "Новостройка",
+                               "Старая квартира" : "Вторичка",
+                               "Не новостройка" : "Вторичка",
+                               "Новая квартира" : "Новостройка",
+                               "Современный комплекс" : "Новостройка",
+                               "Вторичное" : "Вторичка",
+                               "Вторичная квартира" : "Вторичка"
+                               }
+
+    renovation_sinonims = {"Косметика" : "Косметика",
+                           "Космтичский ремонт" : "Косметика",
+                           "Евроремонт" : "Евроремонт",
+                           "Евро" : "Евроремонт",
+                           "Без ремонта" : "Без ремонта",
+                           "Нет Ремонта" : "Без ремонта",
+                           "Дизайнерский" : "Дизайнерский",
+                           "Дизайн" : "Дизайнерский",}
 
     data = pd.read_csv("task_vseros_0/train_C.csv")
-    data.columns = data.columns.str.lower()
     data.drop("json", inplace=True, axis=1)
+    data.columns = data.columns.str.lower()
+    nan_cols = ["area", "living_area", "kitchen_area", "notliving_area"]
+    data[nan_cols] = data[nan_cols].fillna(data[nan_cols].median())
     data.dropna(inplace=True)
-    data.fillna(0, inplace=True)
+    data["apartment_type"] = data["apartment_type"].map(lambda x: apartment_type_sinonims[x])
+    data["renovation"] = data["renovation"].map(lambda x: renovation_sinonims[x])
+    data["metro_station"] = data["metro_station"].str.lower()
+    data["metro_station"] = data["metro_station"].str.replace(" ", "", regex=True)
+    for trash in ["домна", "москва:", "метро", "станция"]:
+        data["metro_station"] = data["metro_station"].str.replace(trash, "", regex=True)
     data.replace(",", ".", regex=True, inplace=True)
 
-    cat_cols = ["apartment_type", "metro_station", "region", "renovation"]
-    num_cols = data.drop("price", axis=1).select_dtypes(include=['number']).columns
-    
-    data[cat_cols] = ore.fit_transform(data[cat_cols])
-
-    iso_mask = IsolationForest(contamination=0.05, n_jobs=-1).fit_predict(data)
-    data = data[iso_mask == 1]
-
+    x_train = data.drop("price", axis=1)
     y_train = data["price"]
 
-    data.drop("price", inplace = True, axis = 1)
-    x_train = data.copy()
-    train_median = x_train[num_cols].mean().round()
-    x_train[num_cols] = x_train[num_cols].fillna(train_median)
-    x_train[cat_cols] = x_train[cat_cols].fillna(-1)
-    x_train = scaler.fit_transform(x_train)
-    x_train = pca.fit_transform(x_train)
-    
     y_test = pd.read_csv("task_vseros_0/ytest_C.csv", index_col="ID")
 
     x_test = pd.read_csv("task_vseros_0/test_C.csv", index_col="ID")
-    x_test.columns = x_test.columns.str.lower()
     x_test.drop("json", inplace=True, axis=1)
+    x_test.columns = x_test.columns.str.lower()
+    nan_cols = ["area", "living_area", "kitchen_area", "notliving_area"]
+    x_test[nan_cols] = x_test[nan_cols].fillna(x_test[nan_cols].median())
+    x_test.dropna(inplace=True)
+    x_test["apartment_type"] = x_test["apartment_type"].map(lambda x: apartment_type_sinonims[x])
+    x_test["renovation"] = x_test["renovation"].map(lambda x: renovation_sinonims[x])
+    x_test["metro_station"] = x_test["metro_station"].str.lower()
+    x_test["metro_station"] = x_test["metro_station"].str.replace(" ", "", regex=True)
+    for trash in ["домна", "москва:", "метро", "станция"]:
+        x_test["metro_station"] = x_test["metro_station"].str.replace(trash, "", regex=True)
     x_test.replace(",", ".", regex=True, inplace=True)
-    x_test[cat_cols] = ore.transform(x_test[cat_cols])
-    x_test[num_cols] = x_test[num_cols].fillna(train_median)
-    x_test[cat_cols] = x_test[cat_cols].fillna(-1)
+
+    x_train[["apartment_type", "renovation", "region", "metro_station"]] = ore.fit_transform(x_train[["apartment_type", "renovation", "region", "metro_station"]])
+    x_test[["apartment_type", "renovation", "region", "metro_station"]] = ore.transform(x_test[["apartment_type", "renovation", "region", "metro_station"]])
+    x_train = scaler.fit_transform(x_train)
     x_test = scaler.transform(x_test)
-    x_test = pca.transform(x_test)
 
-    def objective(trial):
-        model_type = trial.suggest_categorical("model", ["linear", "svm", "knn", "tree", "forest", "catboost"])
-        match model_type:
-            case "linear":
-                model = models.linear_regression(x_train, x_test, y_train, y_test)
-            case "svm":
-                model = models.svm_regressor(x_train, x_test, y_train, y_test)
-            case "knn":
-                model = models.KNN_regressor(x_train, x_test, y_train, y_test)
-            case "tree":
-                model = models.tree_regressor(x_train, x_test, y_train, y_test)
-            case "forest":
-                model = models.random_forest_regressor(x_train, x_test, y_train, y_test) 
-            case "catboost":
-                model = models.cat_boost_regression(x_train, x_test, y_train, y_test)
-
-        pred = model.predict(x_test)
-        score = root_mean_squared_error(pred, y_test)
-        return score
-
-    study = optuna.create_study(sampler=sampler, pruner=pruner, direction="minimize")
-    study.optimize(objective, n_trials=100)
-    return study.best_value
+    model = models.cat_boost_regression(x_train, x_test, y_train, y_test)
+    pred = model.predict(x_test)
+    score = root_mean_squared_error(y_test, pred)
+    return score
 
 
-print(task_c2())
+
+def task_d2(epochs = 150, batch_size = 64, lr = 0.001):
+    torch.set_default_device("cuda")
+    metric = Accuracy(task="multiclass", num_classes=25)
+    criterion = nn.CrossEntropyLoss()
+
+    data = pd.read_csv("task_vseros_0/train_D.csv", index_col="id", sep=",")
+    x_train = data.drop("labels", axis=1).to_numpy(dtype=np.float32)
+
+    labels = data["labels"].str.get_dummies(sep=" ")
+    labels = labels.reindex(columns=[str(i) for i in range(25)], fill_value=0).to_numpy(dtype=np.float32)
+    y_train = labels / labels.sum(axis = 1, keepdims=True)
+
+    x_test = pd.read_csv("task_vseros_0/test_D.csv", index_col="id", sep=",").to_numpy(dtype=np.float32)
+    y_test = pd.read_csv("task_vseros_0/ytest_D.csv", index_col="id", sep=",").to_numpy(dtype=np.float32)
+
+    x_train = torch.from_numpy(x_train).to("cuda").float()
+    x_test = torch.from_numpy(x_test).to("cuda").float()
+    y_train = torch.from_numpy(y_train).to("cuda").float()
+    y_test = torch.from_numpy(y_test).to("cuda").float()
+
+    
+
+    model = nn.Sequential(
+        nn.Linear(16, 64),
+        nn.BatchNorm1d(64),
+        nn.Mish(),
+        nn.Dropout(p = 0.2),
+        nn.Linear(64, 64),
+        nn.BatchNorm1d(64),
+        nn.Mish(),
+        nn.Dropout(p = 0.2),
+        nn.Linear(64, 64),
+        nn.BatchNorm1d(64),
+        nn.Mish(),
+        nn.Dropout(p = 0.2),
+        nn.Linear(64, 25),
+    )
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    for epoch in range(epochs):
+        model.train()
+        perm = torch.randperm(x_train.size(0))
+        epoch_loss = 0.0
+        for i in range(0, x_train.size(0), batch_size):
+            optimizer.zero_grad()
+            idxs = perm[i:i+batch_size]
+            batch_x = x_train[idxs]
+            batch_y = y_train[idxs]
+
+            forw_pass = model(batch_x)
+            loss = criterion(forw_pass, batch_y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+
+
+    model.eval()
+    with torch.no_grad():
+        pred = torch.argmax(model(x_test), dim = 1)
+        score = metric(pred, y_test.view(-1).long())
+
+    return score
+
+print(100 + ((float(task_d2(150, 64, 0.001)) - 0.27)/(0.8 - 0.27) * 100) + ((21.0 - task_c2())/(21.0 - 13.8) * 100) + task_b2()*100)

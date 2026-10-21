@@ -41,7 +41,7 @@ class getModel:
         def optim(trial):
             loss = trial.suggest_categorical("loss", ["squared_error", "squared_epsilon_insensitive", "huber", "epsilon_insensitive"])
             penalty = trial.suggest_categorical("penalty", ["elasticnet", "l1", "l2"])
-            max_iter = trial.suggest_int("max_iter", 100, 10000)
+            max_iter = trial.suggest_int("max_iter", 100, 2500)
             model = SGDRegressor(penalty=penalty, loss=loss, max_iter=max_iter).fit(x_train, y_train)
             pred = model.predict(x_test)
             score = root_mean_squared_error(y_test, pred)
