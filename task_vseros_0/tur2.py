@@ -224,10 +224,14 @@ def task_d2(epochs = 150, batch_size = 64, lr = 0.001):
     labels = data["labels"].str.get_dummies(sep=" ")
     labels = labels.reindex(columns=[str(i) for i in range(25)], fill_value=0).to_numpy(dtype=np.float32)
     y_train = labels / labels.sum(axis = 1, keepdims=True)
+    y_clean = y_train[np.isclose(np.max(y_train), 1.0)]
+    x_clean = x_train[np.isclose(np.max(y_train), 1.0)]
 
     x_test = pd.read_csv("task_vseros_0/test_D.csv", index_col="id", sep=",").to_numpy(dtype=np.float32)
     y_test = pd.read_csv("task_vseros_0/ytest_D.csv", index_col="id", sep=",").to_numpy(dtype=np.float32)
 
+    y_clean = torch.from_numpy(y_clean).to("cuda").float()
+    x_clean = torch.from_numpy(x_clean).to("cuda").float()
     x_train = torch.from_numpy(x_train).to("cuda").float()
     x_test = torch.from_numpy(x_test).to("cuda").float()
     y_train = torch.from_numpy(y_train).to("cuda").float()
@@ -251,14 +255,32 @@ def task_d2(epochs = 150, batch_size = 64, lr = 0.001):
         nn.Linear(64, 25),
     )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer1 = torch.optim.Adam(model.parameters(), lr=lr)
+
+    # for epoch in range(epochs):
+    #     model.train()
+    #     perm = torch.randperm(x_clean.size(0))
+    #     epoch_loss = 0.0
+    #     for i in range(0, x_clean.size(0), batch_size):
+    #         optimizer1.zero_grad()
+    #         idxs = perm[i:i+batch_size]
+    #         batch_x = x_clean[idxs]
+    #         batch_y = y_clean[idxs]
+
+    #         forw_pass = model(batch_x)
+    #         loss = criterion(forw_pass, batch_y)
+    #         loss.backward()
+    #         optimizer1.step()
+    #         epoch_loss += loss.item()
+
+    optimizer2 = torch.optim.Adam(model.parameters(), lr=lr/10)
 
     for epoch in range(epochs):
         model.train()
         perm = torch.randperm(x_train.size(0))
         epoch_loss = 0.0
         for i in range(0, x_train.size(0), batch_size):
-            optimizer.zero_grad()
+            optimizer2.zero_grad()
             idxs = perm[i:i+batch_size]
             batch_x = x_train[idxs]
             batch_y = y_train[idxs]
@@ -266,9 +288,8 @@ def task_d2(epochs = 150, batch_size = 64, lr = 0.001):
             forw_pass = model(batch_x)
             loss = criterion(forw_pass, batch_y)
             loss.backward()
-            optimizer.step()
+            optimizer2.step()
             epoch_loss += loss.item()
-
 
     model.eval()
     with torch.no_grad():
@@ -277,4 +298,5 @@ def task_d2(epochs = 150, batch_size = 64, lr = 0.001):
 
     return score
 
-print(100 + ((float(task_d2(150, 64, 0.001)) - 0.27)/(0.8 - 0.27) * 100) + ((21.0 - task_c2())/(21.0 - 13.8) * 100) + task_b2()*100)
+# print(100 + ((float(task_d2(150, 64, 0.001)) - 0.27)/(0.8 - 0.27) * 100) + ((21.0 - task_c2())/(21.0 - 13.8) * 100) + task_b2()*100)
+print(task_d2(150, 64, 0.001))

@@ -244,10 +244,7 @@ def task_g1():
                 solve.append(prod - 1)
     return sorted(solve)
 
-
-
-
-
-
 def task_h1():
     pass
+
+print(task_c1(10**10, 10**6))
